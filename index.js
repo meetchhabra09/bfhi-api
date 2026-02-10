@@ -22,6 +22,40 @@ const isPrime = (n) => {
 const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
 const lcm = (a, b) => Math.abs(a * b) / gcd(a, b);
 
+/* ------------------ AI FUNCTION ------------------ */
+/* 🔴 MUST BE OUTSIDE SWITCH */
+
+async function getAIResponse(question) {
+  try {
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        contents: [
+          {
+            parts: [
+              {
+                text: `${question}. Reply with only ONE WORD. No punctuation.`
+              }
+            ]
+          }
+        ]
+      }
+    );
+
+    const aiText =
+      response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    if (!aiText) return "NoResponse";
+
+    // Force one-word output
+    return aiText.trim().split(/\s+/)[0];
+
+  } catch (err) {
+    console.error("Gemini Error:", err.response?.data || err.message);
+    return "Unavailable";
+  }
+}
+
 /* ------------------ HEALTH API ------------------ */
 
 app.get("/health", (req, res) => {
@@ -56,8 +90,7 @@ app.post("/bfhl", async (req, res) => {
           throw new Error("Fibonacci input must be a non-negative integer");
         }
         data = [];
-        let a = 0,
-          b = 1;
+        let a = 0, b = 1;
         for (let i = 0; i < value; i++) {
           data.push(a);
           [a, b] = [b, a + b];
@@ -84,75 +117,13 @@ app.post("/bfhl", async (req, res) => {
         }
         data = value.reduce((acc, num) => gcd(acc, num));
         break;
-    case "AI":
-  if (typeof value !== "string" || value.trim() === "") {
-    return res.status(400).json({
-      is_success: false,
-      official_email: EMAIL,
-      error: "AI input must be a non-empty string",
-    });
-  }
 
-  try {
-    const aiRes = await axios.post(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent",
-      {
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text:
-                  "Answer with ONLY ONE WORD. No explanation, no punctuation.\n\n" +
-                  value
-              }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0,
-          topK: 1,
-          topP: 1,
-          maxOutputTokens: 5
+      case "AI":
+        if (typeof value !== "string" || value.trim() === "") {
+          throw new Error("AI input must be a non-empty string");
         }
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "X-goog-api-key": process.env.GEMINI_API_KEY
-        }
-      }
-    );
-
-    // Because we constrained the prompt, we can safely take the full text
-   
-    const rawText = aiRes.data.candidates[0].content.parts[0].text;
-
-  const words = rawText
-    .replace(/[^A-Za-z\s]/g, "") // keep letters + spaces
-    .trim()
-    .split(/\s+/);
-
-  data = words[words.length - 1]; 
-
-  } catch (err) {
-    console.log("Gemini failed:", err.message);
-
-    // Graceful fallback (keeps API stable)
-    const q = value.toLowerCase();
-    if (q.includes("capital") && q.includes("maharashtra")) {
-      data = "Mumbai";
-    } else if (q.includes("capital") && q.includes("india")) {
-      data = "Delhi";
-    } else {
-      data = "Unknown";
-    }
-  }
-
-  break;
-
-
-
+        data = await getAIResponse(value); // ✅ ACTUAL CALL
+        break;
 
       default:
         return res.status(400).json({
@@ -167,11 +138,9 @@ app.post("/bfhl", async (req, res) => {
       official_email: EMAIL,
       data,
     });
+
   } catch (err) {
-    console.log(
-    "Gemini FULL error:",
-    JSON.stringify(err.response?.data, null, 2)
-  );
+    console.error("Error:", err.message);
     return res.status(400).json({
       is_success: false,
       official_email: EMAIL,
@@ -182,4 +151,6 @@ app.post("/bfhl", async (req, res) => {
 
 /* ------------------ SERVER ------------------ */
 
-app.listen(process.env.PORT || 3000, () => console.log("Server running"));
+app.listen(process.env.PORT || 3000, () =>
+  console.log("Server running")
+);
