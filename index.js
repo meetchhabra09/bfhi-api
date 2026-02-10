@@ -125,7 +125,15 @@ app.post("/bfhl", async (req, res) => {
     );
 
     // Because we constrained the prompt, we can safely take the full text
-    data = aiRes.data.candidates[0].content.parts[0].text.trim();
+   
+    const rawText = aiRes.data.candidates[0].content.parts[0].text;
+
+  const words = rawText
+    .replace(/[^A-Za-z\s]/g, "") // keep letters + spaces
+    .trim()
+    .split(/\s+/);
+
+  data = words[words.length - 1]; 
 
   } catch (err) {
     console.log("Gemini failed:", err.message);
